@@ -1,49 +1,15 @@
-import DOMPurify from 'isomorphic-dompurify';
-
 // ── Bulk-marketing HTML utilities ───────────────────────────────────────────
-// Shared by the composer (server-side sanitise on save) and the sender
-// (token expansion + unsubscribe-footer injection per recipient).
 
-const ALLOWED_TAGS = [
-  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-  'p', 'br', 'hr',
-  'ul', 'ol', 'li',
-  'a',
-  'b', 'strong', 'i', 'em', 'u', 's', 'del', 'sub', 'sup',
-  'blockquote', 'pre', 'code',
-  'span', 'div',
-  'table', 'thead', 'tbody', 'tr', 'th', 'td', 'caption',
-  'img', 'figure', 'figcaption',
-  'mark', 'abbr',
-];
-
-const ALLOWED_ATTR = [
-  'href', 'src', 'alt', 'title', 'class', 'style',
-  'target', 'rel',
-  'width', 'height',
-  'colspan', 'rowspan',
-];
-
-const FORBID_TAGS = [
-  'script', 'iframe', 'object', 'embed',
-  'form', 'input', 'textarea', 'select', 'button',
-  'svg', 'math', 'link', 'meta', 'style',
-];
-
-const FORBID_ATTR = [
-  'onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur',
-  'onmouseout', 'onsubmit', 'onchange',
-];
+const FORBIDDEN_TAGS = /(<\s*\/?(script|iframe|object|embed|form|input|textarea|select|button|svg|math|link|meta|style)[^>]*>)/gi;
+const FORBIDDEN_ATTR = /\s*(onerror|onload|onclick|onmouseover|onfocus|onblur|onmouseout|onsubmit|onchange)[^=]*=\s*["'][^"']*["']/gi;
+const FORBIDDEN_HREF = /href\s*=\s*["']\s*javascript:[^"']*/gi;
 
 export function sanitizeMarketingHtml(html: unknown): string {
   if (typeof html !== 'string' || !html) return '';
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR,
-    ALLOW_DATA_ATTR: false,
-    FORBID_TAGS,
-    FORBID_ATTR,
-  });
+  return html
+    .replace(FORBIDDEN_TAGS, '')
+    .replace(FORBIDDEN_ATTR, '')
+    .replace(FORBIDDEN_HREF, 'href="#"');
 }
 
 export interface MergeContext {
