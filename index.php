@@ -31,7 +31,7 @@
     <div class="row">
       <div class="col-md-6 align-self-center">
         <div class="copyright-text">
-          <p><a href="#">Eventre</a> &#169; 2026 All Reserved</p>
+          <p><a href="#">Eventre</a> &#169; 2027 All Reserved</p>
         </div>
       </div>
       <div class="col-md-6">
