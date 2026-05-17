@@ -1,0 +1,321 @@
+diff --git a/app/api/whatsapp/training-promo/route.ts b/app/api/whatsapp/training-promo/route.ts
+index 12346f58..857ba07a 100644
+--- a/app/api/whatsapp/training-promo/route.ts
++++ b/app/api/whatsapp/training-promo/route.ts
+@@ -64,20 +64,49 @@ const ensureWorkerRecovered = async () => {
+   await recoverAndStart();
+ };
+ 
+-async function loadAudience(): Promise<Array<{ phone: string; userId: string; name?: string }>> {
+-  const result: any = await sql`SELECT id, data FROM lms_users`;
+-  const users: LmsUserRow[] = Array.isArray(result) ? result : [];
++async function loadAudience(
++  includeImported: boolean = false,
++): Promise<Array<{ phone: string; userId: string; name?: string; source: 'lms' | 'imported' }>> {
+   const seen = new Set<string>();
+-  const recipients: Array<{ phone: string; userId: string; name?: string }> = [];
+-  for (const row of users) {
+-    const u = row?.data || {};
+-    if (u?.receiveTrainingAlerts === false) continue;
+-    const phone = normalizePhone(u?.phone || u?.whatsapp || u?.mobile);
+-    if (!phone) continue;
+-    if (seen.has(phone)) continue;
+-    seen.add(phone);
+-    recipients.push({ phone, userId: row.id, name: u?.name || u?.fullName });
++  const recipients: Array<{ phone: string; userId: string; name?: string; source: 'lms' | 'imported' }> = [];
++
++  // LMS users — opted-in by default; explicit opt-outs are skipped.
++  try {
++    const result: any = await sql`SELECT id, data FROM lms_users`;
++    const users: LmsUserRow[] = Array.isArray(result) ? result : [];
++    for (const row of users) {
++      const u = row?.data || {};
++      if (u?.receiveTrainingAlerts === false) continue;
++      const phone = normalizePhone(u?.phone || u?.whatsapp || u?.mobile);
++      if (!phone) continue;
++      if (seen.has(phone)) continue;
++      seen.add(phone);
++      recipients.push({ phone, userId: row.id, name: u?.name || u?.fullName, source: 'lms' });
++    }
++  } catch (err) {
++    console.error('training-promo: lms_users load failed', err);
++  }
++
++  // Manually-added / CSV-imported marketing leads — only when the admin
++  // explicitly asks for them. Mirrors the multi-training-promo route so
++  // the single-training modal exposes the same audience choice.
++  if (includeImported) {
++    try {
++      const mp: any = await sql`SELECT id, data FROM marketing_participants`;
++      const rows: LmsUserRow[] = Array.isArray(mp) ? mp : [];
++      for (const row of rows) {
++        const u = row?.data || {};
++        const raw = u?.mobile ? `${u?.countryCode || ''}${u?.mobile}` : (u?.whatsapp || u?.phone || '');
++        const phone = normalizePhone(raw);
++        if (!phone || seen.has(phone)) continue;
++        seen.add(phone);
++        recipients.push({ phone, userId: row.id, name: u?.fullName || u?.name, source: 'imported' });
++      }
++    } catch (err) {
++      console.error('training-promo: marketing_participants load failed', err);
++    }
+   }
++
+   return recipients;
+ }
+ 
+@@ -229,11 +258,12 @@ export async function POST(req: NextRequest) {
+       });
+     }
+ 
+-    let fullAudience: Array<{ phone: string; userId: string; name?: string }> = [];
++    const includeImportedReblast = body?.audience === 'lms+imported';
++    let fullAudience: Array<{ phone: string; userId: string; name?: string; source: 'lms' | 'imported' }> = [];
+     let alreadySent: Set<string>;
+     try {
+       [fullAudience, alreadySent] = await Promise.all([
+-        loadAudience(),
++        loadAudience(includeImportedReblast),
+         getSentPhonesForTraining(trainingId),
+       ]);
+     } catch (err) {
+@@ -407,6 +437,7 @@ export async function POST(req: NextRequest) {
+   const trainingId = String(body?.trainingId || '').trim();
+   const training = body?.training || {};
+   const dryRun = body?.dryRun === true;
++  const includeImported = body?.audience === 'lms+imported';
+ 
+   if (!trainingId) {
+     return NextResponse.json({ ok: false, error: 'trainingId is required' }, { status: 400 });
+@@ -418,17 +449,22 @@ export async function POST(req: NextRequest) {
+     );
+   }
+ 
+-  let recipients: Array<{ phone: string; userId: string; name?: string }> = [];
++  let recipients: Array<{ phone: string; userId: string; name?: string; source: 'lms' | 'imported' }> = [];
+   try {
+-    recipients = await loadAudience();
++    recipients = await loadAudience(includeImported);
+   } catch (err) {
+-    console.error('training-promo: lms_users fetch failed', err);
++    console.error('training-promo: audience fetch failed', err);
+     return NextResponse.json(
+-      { ok: false, error: 'Failed to load LMS user list' },
++      { ok: false, error: 'Failed to load recipient list' },
+       { status: 500 },
+     );
+   }
+ 
++  const breakdown = {
++    lms: recipients.filter(r => r.source === 'lms').length,
++    imported: recipients.filter(r => r.source === 'imported').length,
++  };
++
+   if (dryRun) {
+     return NextResponse.json({
+       ok: true,
+@@ -436,6 +472,7 @@ export async function POST(req: NextRequest) {
+       attempted: recipients.length,
+       succeeded: 0,
+       failed: 0,
++      breakdown,
+       recipients: recipients.map(r => ({ phone: r.phone, ok: true })),
+     });
+   }
+@@ -515,7 +552,7 @@ export async function POST(req: NextRequest) {
+     await sql`INSERT INTO whatsapp_training_promos
+       (training_id, attempted, succeeded, failed, data)
+       VALUES (${trainingId}, ${recipients.length}, 0, 0,
+-              ${JSON.stringify({ topic: training.topic, jobId: newJobId, queued: true })}::jsonb)`;
++              ${JSON.stringify({ topic: training.topic, jobId: newJobId, queued: true, audience: includeImported ? 'lms+imported' : 'lms', breakdown })}::jsonb)`;
+   } catch (err) {
+     console.error('training-promo: audit log insert failed (non-fatal)', err);
+   }
+diff --git a/components/TrainingCalendar.tsx b/components/TrainingCalendar.tsx
+index 3b9932af..38bb2316 100644
+--- a/components/TrainingCalendar.tsx
++++ b/components/TrainingCalendar.tsx
+@@ -1707,6 +1707,13 @@ const SessionCard: React.FC<SessionCardProps> = ({ training, index, onEdit, onDe
+     const [showPromoModal, setShowPromoModal] = useState(false);
+     const [promoBusy, setPromoBusy] = useState(false);
+     const [promoCount, setPromoCount] = useState<number | null>(null);
++    const [promoBreakdown, setPromoBreakdown] = useState<{ lms: number; imported: number } | null>(null);
++    // 'lms'           → only LMS-portal users (default — opted-in alerts)
++    // 'lms+imported'  → also include manually-added / CSV-imported leads
++    //                   from `marketing_participants`. Mirrors the bulk
++    //                   multi-training "Promote Trainings" audience picker.
++    const [promoAudience, setPromoAudience] = useState<'lms' | 'lms+imported'>('lms');
++    const [promoCountLoading, setPromoCountLoading] = useState(false);
+     const [promoResult, setPromoResult] = useState<{ attempted: number; succeeded: number; failed: number } | null>(null);
+     const [promoError, setPromoError] = useState<string | null>(null);
+     // Background-job state. Once the admin clicks Send we get a jobId back
+@@ -2016,22 +2023,14 @@ const SessionCard: React.FC<SessionCardProps> = ({ training, index, onEdit, onDe
+     // Stop polling if the component unmounts mid-blast.
+     useEffect(() => () => stopPromoPolling(), [stopPromoPolling]);
+ 
+-    const openPromoModal = useCallback(async () => {
+-      setShowPromoModal(true);
++    // Live-fetch the audience size for the chosen audience. Extracted so
++    // it can be re-run whenever the admin flips the audience toggle in
++    // the modal without re-opening it. Failures are surfaced inline.
++    const fetchPromoCount = useCallback(async (audience: 'lms' | 'lms+imported') => {
++      setPromoCountLoading(true);
+       setPromoCount(null);
+-      setPromoResult(null);
++      setPromoBreakdown(null);
+       setPromoError(null);
+-      setPromoJob(null);
+-      setPromoHistory(null);
+-      setPromoHistoryExpanded({});
+-      setPromoHistoryDeleting({});
+-      setPromoRetentionMessage(null);
+-      // Kick off the past-blasts fetch + retention setting in parallel
+-      // with the dryRun count.
+-      void loadPromoHistory();
+-      void loadPromoRetention();
+-      // Live-fetch the audience size so admins know the blast scope before
+-      // committing. Failures are surfaced inline rather than thrown.
+       const adminToken = typeof window !== 'undefined' ? (localStorage.getItem('admin_session_token') || '') : '';
+       try {
+         const res = await fetch('/api/whatsapp/training-promo', {
+@@ -2041,6 +2040,7 @@ const SessionCard: React.FC<SessionCardProps> = ({ training, index, onEdit, onDe
+             trainingId: training.id,
+             training: buildPromoPayload(),
+             dryRun: true,
++            audience,
+           }),
+         });
+         const j = await res.json().catch(() => ({}));
+@@ -2049,11 +2049,43 @@ const SessionCard: React.FC<SessionCardProps> = ({ training, index, onEdit, onDe
+           setPromoCount(0);
+         } else {
+           setPromoCount(Number(j?.attempted) || 0);
++          if (j?.breakdown && typeof j.breakdown === 'object') {
++            setPromoBreakdown({
++              lms: Number(j.breakdown.lms) || 0,
++              imported: Number(j.breakdown.imported) || 0,
++            });
++          }
+         }
+       } catch (err: any) {
+         setPromoError(err?.message || 'Failed to load recipient count');
+         setPromoCount(0);
++      } finally {
++        setPromoCountLoading(false);
+       }
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++    }, [training.id, training.topic, training.date, training.startTime, training.endTime]);
++
++    const openPromoModal = useCallback(async () => {
++      setShowPromoModal(true);
++      setPromoCount(null);
++      setPromoBreakdown(null);
++      setPromoResult(null);
++      setPromoError(null);
++      setPromoJob(null);
++      setPromoHistory(null);
++      setPromoHistoryExpanded({});
++      setPromoHistoryDeleting({});
++      setPromoRetentionMessage(null);
++      // Reset the audience to the safe default ('lms') every time the
++      // modal opens so a previous session's "include imported" choice
++      // doesn't silently widen the next blast.
++      setPromoAudience('lms');
++      // Kick off the past-blasts fetch + retention setting in parallel
++      // with the dryRun count.
++      void loadPromoHistory();
++      void loadPromoRetention();
++      void fetchPromoCount('lms');
++      const adminToken = typeof window !== 'undefined' ? (localStorage.getItem('admin_session_token') || '') : '';
+       // Resume an in-flight blast for this training, if one exists. This
+       // lets the admin re-open the modal after a refresh and still see
+       // live progress instead of a "ready to send" confirmation.
+@@ -2087,6 +2119,7 @@ const SessionCard: React.FC<SessionCardProps> = ({ training, index, onEdit, onDe
+           body: JSON.stringify({
+             trainingId: training.id,
+             training: buildPromoPayload(),
++            audience: promoAudience,
+           }),
+         });
+         const j = await res.json().catch(() => ({}));
+@@ -2112,7 +2145,7 @@ const SessionCard: React.FC<SessionCardProps> = ({ training, index, onEdit, onDe
+         setPromoBusy(false);
+       }
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+-    }, [training.id, training.topic, training.date, training.startTime, training.endTime, startPromoPolling]);
++    }, [training.id, training.topic, training.date, training.startTime, training.endTime, startPromoPolling, promoAudience]);
+ 
+     const cancelPromoBlast = useCallback(async () => {
+       if (!promoJob) return;
+@@ -2222,6 +2255,7 @@ const SessionCard: React.FC<SessionCardProps> = ({ training, index, onEdit, onDe
+             action: 'reblast-missed',
+             trainingId: training.id,
+             training: buildPromoPayload(),
++            audience: promoAudience,
+           }),
+         });
+         const j = await res.json().catch(() => ({}));
+@@ -2250,7 +2284,7 @@ const SessionCard: React.FC<SessionCardProps> = ({ training, index, onEdit, onDe
+         setPromoReblastMissedBusy(false);
+       }
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+-    }, [promoReblastMissedBusy, training.id, training.topic, training.date, training.startTime, training.endTime, startPromoPolling, loadPromoHistory]);
++    }, [promoReblastMissedBusy, training.id, training.topic, training.date, training.startTime, training.endTime, startPromoPolling, loadPromoHistory, promoAudience]);
+ 
+     const retryPromoFailed = useCallback(async () => {
+       if (!promoJob) return;
+@@ -5406,13 +5440,53 @@ const SessionCard: React.FC<SessionCardProps> = ({ training, index, onEdit, onDe
+                                         <div className="text-[10px] text-slate-500 mt-2 italic">Preview only — final message uses your approved Meta template.</div>
+                                     </div>
+ 
++                                    {/* Audience picker — mirrors the bulk multi-training
++                                        promo so admins can include manually-added /
++                                        CSV-imported leads (`marketing_participants`)
++                                        in addition to the LMS user list. Switching
++                                        the audience re-runs the dryRun count below
++                                        so the recipient total stays accurate. */}
++                                    <div className="rounded-xl border border-slate-200 overflow-hidden">
++                                        <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase tracking-wider text-slate-600">
++                                            Send to
++                                        </div>
++                                        <div className="grid grid-cols-2 text-[11px]">
++                                            {([
++                                                { v: 'lms' as const,           label: 'LMS users only',  sub: 'Opted-in portal users' },
++                                                { v: 'lms+imported' as const,  label: 'LMS + Manual',     sub: 'Includes imported leads' },
++                                            ]).map(opt => {
++                                                const active = promoAudience === opt.v;
++                                                return (
++                                                    <button
++                                                        key={opt.v}
++                                                        type="button"
++                                                        onClick={() => {
++                                                            if (promoAudience === opt.v) return;
++                                                            setPromoAudience(opt.v);
++                                                            void fetchPromoCount(opt.v);
++                                                        }}
++                                                        disabled={promoCountLoading}
++                                                        className={`px-3 py-2.5 text-left transition-colors ${active ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-400' : 'bg-white hover:bg-slate-50'} disabled:opacity-60`}
++                                                    >
++                                                        <div className={`font-black ${active ? 'text-emerald-800' : 'text-slate-700'}`}>{opt.label}</div>
++                                                        <div className={`text-[10px] ${active ? 'text-emerald-700' : 'text-slate-500'}`}>{opt.sub}</div>
++                                                    </button>
++                                                );
++                                            })}
++                                        </div>
++                                    </div>
++
+                                     <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3">
+                                         <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-lg">
+                                             {promoCount === null ? <Loader2 size={20} className="animate-spin" /> : promoCount}
+                                         </div>
+                                         <div className="flex-1">
+                                             <div className="text-sm font-black text-emerald-900">{promoCount === null ? 'Counting recipients…' : `${promoCount} recipient${promoCount === 1 ? '' : 's'}`}</div>
+-                                            <div className="text-[11px] text-emerald-700">LMS users with phone, minus opt-outs</div>
++                                            <div className="text-[11px] text-emerald-700">
++                                                {promoBreakdown && (promoBreakdown.lms > 0 || promoBreakdown.imported > 0)
++                                                    ? `${promoBreakdown.lms} LMS${promoBreakdown.imported > 0 ? ` + ${promoBreakdown.imported} imported` : ''} · phone on file, minus opt-outs`
++                                                    : 'Phone on file, minus opt-outs'}
++                                            </div>
+                                         </div>
+                                     </div>
+                                 </>

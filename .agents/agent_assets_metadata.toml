@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "3I2oTiotv9GqvQGTD2mOf"
+uri = "file://haccppro-source.tar.gz"
+type = "unspecified"
+title = "HACCP PRO — Full Source Code"

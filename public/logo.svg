@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000">
+  <circle cx="500" cy="500" r="480" fill="#2d3748" stroke="#1a202c" stroke-width="20"/>
+  <circle cx="500" cy="500" r="450" fill="none" stroke="#e53e3e" stroke-width="5"/>
+  <circle cx="500" cy="500" r="400" fill="none" stroke="#e53e3e" stroke-width="3"/>
+  <defs>
+    <path id="topArc" d="M 200,500 A 300,300 0 1,1 800,500" fill="none"/>
+    <path id="bottomArc" d="M 800,500 A 300,300 0 1,1 200,500" fill="none"/>
+  </defs>
+  <text fill="white" font-size="90" font-weight="900" font-family="Inter, Arial, sans-serif">
+    <textPath href="#topArc" startOffset="50%" text-anchor="middle">HACCP PRO</textPath>
+  </text>
+  <text fill="#ecc94b" font-size="85" font-weight="900" font-family="Inter, Arial, sans-serif">
+    <textPath href="#bottomArc" startOffset="50%" text-anchor="middle">FOOD SAFETY</textPath>
+  </text>
+  <polygon points="150,580 165,540 130,515 170,515 185,475 200,515 240,515 205,540 220,580 185,555" fill="#e53e3e"/>
+  <polygon points="850,580 835,540 870,515 830,515 815,475 800,515 760,515 795,540 780,580 815,555" fill="#e53e3e"/>
+  <circle cx="500" cy="480" r="160" fill="white"/>
+  <path d="M 460,430 L 460,500 L 475,500 L 475,430 M 485,430 L 485,500 L 500,500 L 500,430 M 510,430 L 510,500 L 525,500 L 525,430 M 535,430 L 535,500 L 550,500 L 550,430" fill="#2d3748"/>
+  <path d="M 470,500 Q 505,580 540,500 L 525,500 L 525,550 L 485,550 L 485,500 Z" fill="#2d3748"/>
+  <path d="M 330,450 Q 280,450 285,520 L 285,600 Q 285,720 480,720 L 520,720 Q 715,720 715,600 L 715,520 Q 720,450 670,450 L 670,550 Q 670,640 500,640 Q 330,640 330,550 Z" fill="white"/>
+  <path d="M 500,320 Q 470,280 520,280 Q 520,320 500,320 Z" fill="white"/>
+  <path d="M 500,320 Q 530,280 480,280 Q 480,320 500,320 Z" fill="white"/>
+</svg>

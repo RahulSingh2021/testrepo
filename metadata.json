@@ -1,0 +1,9 @@
+{
+  "name": "Remix: HACCP PRO Dashboard",
+  "description": "Enterprise Food Safety Management System on Next.js 15 \u0026 React 19",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
