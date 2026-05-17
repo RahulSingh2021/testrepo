@@ -19,6 +19,10 @@ const nextConfig: NextConfig = {
     '@ifct2017/nutrients',
     '@ifct2017/methods',
     '@ifct2017/hierarchy',
+    'html-encoding-sniffer',
+    '@exodus/bytes',
+    'jsdom',
+    'whatwg-encoding',
   ],
 
   // Skip type-check and lint during builds (already fast, keep them off)
