@@ -19,5 +19,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 9898
           script: |
-            cd /home/safefood/public_html/node
+            cd /home/safefood/public_html
             git pull origin main
+            find . -type f -exec chmod 644 {} \;
+            find . -type d -exec chmod 755 {} \;
