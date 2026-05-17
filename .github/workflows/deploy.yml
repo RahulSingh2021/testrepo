@@ -20,7 +20,7 @@ jobs:
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 9898
           script: |
-            cd /home/safefood/public_html
+            cd /home/safefood/public_html/node
             git pull origin main
             find . -type f -exec chmod 644 {} \;
             find . -type d -exec chmod 755 {} \;
