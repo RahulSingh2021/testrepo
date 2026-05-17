@@ -22,6 +22,6 @@ jobs:
           script: |
             cd /home/safefood/public_html/node
             git pull origin main
-            cp -r /home/safefood/public_html/node/* /home/safefood/public_html/
+            rsync -av --exclude='.git' --exclude='.github' /home/safefood/public_html/node/ /home/safefood/public_html/
             find /home/safefood/public_html -type f -exec chmod 644 {} \;
             find /home/safefood/public_html -type d -exec chmod 755 {} \;
