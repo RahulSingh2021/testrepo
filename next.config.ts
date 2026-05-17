@@ -23,6 +23,8 @@ const nextConfig: NextConfig = {
     '@exodus/bytes',
     'jsdom',
     'whatwg-encoding',
+    'isomorphic-dompurify',
+    'dompurify',
   ],
 
   // Skip type-check and lint during builds (already fast, keep them off)
