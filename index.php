@@ -39,7 +39,7 @@
       <div class="collapse navbar-collapse" id="navbarNav">
       <ul class="navbar-nav mx-auto">
         <li class="nav-item dropdown active dropdown-slide">
-          <a class="nav-link" href="#"  data-toggle="dropdown">Home
+          <a class="nav-link" href="#"  data-toggle="dropdown">Home11
             <span>/</span>
           </a>
           <!-- Dropdown list -->
