@@ -54,7 +54,7 @@
         </li>
 
         <li class="nav-item">
-          <a class="nav-link" href="schedule.html">Schedule<span>/</span></a>
+          <a class="nav-link" href="schedule.html">Schedule11<span>/</span></a>
         </li>
         <li class="nav-item">
           <a class="nav-link" href="sponsors.html">Sponsors<span>/</span></a>
